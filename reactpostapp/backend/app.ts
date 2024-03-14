@@ -1,6 +1,8 @@
+import 'dotenv/config';
 import express from "express";
 import cors from "cors";
-import jwt from "jsonwebtoken";
+import { Request, Response, NextFunction } from 'express';
+import jwt, {JwtPayload, VerifyErrors }from "jsonwebtoken";
 import {
   findUserById,
   IDecodedUser,
@@ -12,6 +14,10 @@ import {
   users
 } from "./fakedb";
 
+interface MyTokenPayload extends JwtPayload {
+  id: number | string; 
+}
+
 const port = 8085;
 const app = express();
 app.use(cors());
@@ -22,7 +28,7 @@ app.post("/api/user/login", (req, res) => {
   try {
     const { email, password } = req.body;
     const user = verifyUser(email, password);
-    const token = jwt.sign({ id: user.id }, "secret", {
+    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET as string, {
       expiresIn: "2 days",
     });
     res.json({ result: { user, token } });
@@ -35,7 +41,7 @@ app.post("/api/user/validation", (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     const token = parseToken(authHeader, res);
-    const decodedUser = jwt.verify(token, "secret");
+    const decodedUser = jwt.verify(token, process.env.JWT_SECRET as string);
     const user = findUserById((decodedUser as IDecodedUser).id);
     res.json({ result: { user, token } });
   } catch (error) {
@@ -43,9 +49,36 @@ app.post("/api/user/validation", (req, res) => {
   }
 });
 
-app.get("/api/posts", async (req, res) => {
-  await sleep(2000); // Simulates a delay of 5 seconds
-  res.json(posts);
+const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader?.split(' ')[1];
+  if (token == null) return res.sendStatus(401); // if no token found
+
+  jwt.verify(token, process.env.JWT_SECRET as string, (err, decoded) => {
+    if (err) return res.sendStatus(403); // if token is not valid
+    const user = decoded as MyTokenPayload;
+    if (user) {
+      (req as any).userId = user.id;
+    }
+    next(); 
+  });
+};
+
+export default authenticateToken;
+
+
+// Fetch posts
+app.get("/api/posts", authenticateToken, async (req, res) => {
+  await sleep(2000); // Simulate delay
+  res.json(posts); // Return the list of posts
+});
+
+// Create a new post
+app.post("/api/posts", authenticateToken, async (req, res) => {
+  const post = req.body;
+  post.userId = (req as any).userId; // Attach userId from authenticated user
+  const addedPost = addPost(post); 
+  res.status(201).json(addedPost); // Return the newly created post
 });
 
 // ⭐️ TODO: Implement this yourself
@@ -78,11 +111,7 @@ app.get("/api/posts/:id", (req, res) => {
  *     What if you make a request to this route with a valid token but
  *     with an empty/incorrect payload (post)
  */
-app.post("/api/posts", (req, res) => {
-  const incomingPost = req.body;
-  addPost(incomingPost);
-  res.status(200).json({ success: true });
-});
+
 
 app.put("/api/posts/:id", async (req, res) => {
   // Extract the post ID from the URL parameters

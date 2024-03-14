@@ -16,12 +16,30 @@ function CreatePostPage() {
   });
 
   const handleSubmit = async (values) => {
-    const res = await axios.post(`${DOMAIN}/api/posts`, values);
-    if (res?.data.success) {
-      navigate("/posts");
+    const token = localStorage.getItem('authToken');
+    console.log('Retrieved token:', token);
+    
+    if (!token) {
+      console.error("No auth token found. Please log in first.");
+      return;
+    }
+  
+    try {
+      const res = await axios.post(`${DOMAIN}/api/posts`, values, {
+        headers: {
+          Authorization: `Bearer ${token}` // Include the token in the Authorization header
+        }
+      });
+  
+      if (res.status === 201 || res.data.success) {
+        navigate("/posts");
+      }
+    } catch (error) {
+      console.error("Error creating post:", error.response.data);
+      // Handle error
     }
   };
-
+  
   return (
     <Box maw={300} mx="auto" style={{ paddingBottom: '20vh', paddingTop: '20vh'}}>
       <form onSubmit={form.onSubmit(handleSubmit)} >

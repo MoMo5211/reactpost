@@ -20,6 +20,8 @@ const createAuthStore = (set, get) => ({
       });
       if (res.data.result?.user && res.data.result?.token) {
         setSession(res.data.result?.token);
+        localStorage.setItem('authToken', res.data.result.token);
+        console.log('Token stored:', res.data.result.token);
         set({ user: res.data.result?.user, authLoading: false });
       } else {
         set({ authLoading: false, user: null });
